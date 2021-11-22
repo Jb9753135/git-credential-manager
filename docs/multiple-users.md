@@ -4,7 +4,7 @@ If you work with multiple different identities on a single Git hosting service, 
 
 ## Foundations: Git and Git hosts
 
-Git itself doesn't have a strong concept of "user". There's the `user.name` and `user.email` which get embedded into commit headers/trailers, but these are arbitrary strings. GCM doesn't interact with this notion of a user at all. You can put whatever you want into your `user.*` config, and nothing in GCM will change at all.
+Git itself doesn't have a single, strong concept of "user". There's the `user.name` and `user.email` which get embedded into commit headers/trailers, but these are arbitrary strings. GCM doesn't interact with this notion of a user at all. You can put whatever you want into your `user.*` config, and nothing in GCM will change at all.
 
 Separate from the user strings in commits, Git recognizes the "user" part of a remote URL or a credential. These are not often used, at least by default, in the web UI of major Git hosts.
 
