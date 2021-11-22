@@ -1,4 +1,4 @@
-# Multiple users in GCM
+# Multiple users
 
 If you work with multiple different identities on a single Git hosting service, you may be wondering if Git Credential Manager (GCM) supports this workflow. The answer is yes, with a bit of complexity due to how it interoperates with Git.
 
