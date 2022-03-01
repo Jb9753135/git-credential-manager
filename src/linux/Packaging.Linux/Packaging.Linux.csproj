@@ -7,6 +7,10 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <InstallFromSource>false</InstallFromSource>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Include="**/*" />
   </ItemGroup>
@@ -18,9 +22,14 @@
   <!-- Implicit SDK targets import (so we can override the default targets below) -->
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 
-  <Target Name="CoreCompile" DependsOnTargets="GetBuildVersion" Condition="'$(OSPlatform)'=='linux'">
-    <Message Text="$(MSBuildProjectDirectory)\build.sh --configuration='$(Configuration)' --version='$(BuildVersion)'" Importance="High" />
-    <Exec Command="$(MSBuildProjectDirectory)\build.sh --configuration='$(Configuration)' --version='$(BuildVersion)'" />
+  <Target Name="CoreCompile" DependsOnTargets="GetBuildVersion" Condition="'$(OSPlatform)'=='linux' And '$(InstallFromSource)'=='false'">
+    <Message Text="$(MSBuildProjectDirectory)\build.sh --install-from-source=false --configuration='$(Configuration)' --version='$(BuildVersion)'" Importance="High" />
+    <Exec Command="$(MSBuildProjectDirectory)\build.sh --install-from-source=false --configuration='$(Configuration)' --version='$(BuildVersion)'" />
+  </Target>
+
+  <Target Name="CoreCompile" DependsOnTargets="GetBuildVersion" Condition="'$(OSPlatform)'=='linux' And '$(InstallFromSource)'=='true'">
+    <Message Text="$(MSBuildProjectDirectory)\build.sh --install-from-source=true --configuration='$(Configuration)' --version='$(BuildVersion)'" Importance="High" />
+    <Exec Command="$(MSBuildProjectDirectory)\build.sh --install-from-source=true --configuration='$(Configuration)' --version='$(BuildVersion)'" />
   </Target>
 
   <Target Name="CoreClean">
