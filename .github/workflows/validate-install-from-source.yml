@@ -1,0 +1,28 @@
+name: validate-install-from-source
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  docker:
+    name: ${{matrix.vector.image}}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        vector:
+        - image: ubuntu
+        - image: debian
+        - image: linuxmintd/mint20-amd64
+        - image: fedora
+        - image: centos
+        - image: redhat/ubi8
+        - image: alpine
+    container: ${{matrix.vector.image}}
+    steps:
+      - uses: actions/checkout@v1
+      - run: |
+          sh "${GITHUB_WORKSPACE}/src/linux/Packaging.Linux/install-from-source.sh" -y
+          git-credential-manager-core --help || exit 1
