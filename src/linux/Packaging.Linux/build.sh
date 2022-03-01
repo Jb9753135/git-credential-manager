@@ -32,6 +32,10 @@ case "$i" in
     VERSION="${i#*=}"
     shift # past argument=value
     ;;
+    --install-from-source=*)
+    INSTALL_FROM_SOURCE="${i#*=}"
+    shift # past argument=value
+    ;;
     *)
           # unknown option
     ;;
@@ -59,22 +63,28 @@ if [ -z "$VERSION" ]; then
     die "--version was not set"
 fi
 
-ARCH="`dpkg-architecture -q DEB_HOST_ARCH`"
-if test -z "$ARCH"; then
-  die "Could not determine host architecture!"
+if [ "$INSTALL_FROM_SOURCE" = false ]; then
+    ARCH="`dpkg-architecture -q DEB_HOST_ARCH`"
+    if test -z "$ARCH"; then
+    die "Could not determine host architecture!"
+    fi
 fi
 
 # Outputs
 PAYLOAD="$PROJ_OUT/payload/$CONFIGURATION"
 SYMBOLOUT="$PROJ_OUT/payload.sym/$CONFIGURATION"
 
-TAROUT="$PROJ_OUT/tar/$CONFIGURATION"
-TARBALL="$TAROUT/gcmcore-linux_$ARCH.$VERSION.tar.gz"
-SYMTARBALL="$TAROUT/symbols-linux_$ARCH.$VERSION.tar.gz"
+if [ "$INSTALL_FROM_SOURCE" = false ]; then
+    TAROUT="$PROJ_OUT/tar/$CONFIGURATION"
+    TARBALL="$TAROUT/gcmcore-linux_$ARCH.$VERSION.tar.gz"
+    SYMTARBALL="$TAROUT/symbols-linux_$ARCH.$VERSION.tar.gz"
 
-DEBOUT="$PROJ_OUT/deb/$CONFIGURATION"
-DEBROOT="$DEBOUT/root"
-DEBPKG="$DEBOUT/gcmcore-linux_$ARCH.$VERSION.deb"
+    DEBOUT="$PROJ_OUT/deb/$CONFIGURATION"
+    DEBROOT="$DEBOUT/root"
+    DEBPKG="$DEBOUT/gcmcore-linux_$ARCH.$VERSION.deb"
+else
+    INSTALL_LOCATION="$HOME/usr/local"
+fi
 
 # Cleanup payload directory
 if [ -d "$PAYLOAD" ]; then
@@ -89,7 +99,13 @@ if [ -d "$SYMBOLOUT" ]; then
 fi
 
 # Ensure directories exists
-mkdir -p "$PAYLOAD" "$SYMBOLOUT" "$DEBROOT"
+mkdir -p "$PAYLOAD" "$SYMBOLOUT"
+
+if [ "$INSTALL_FROM_SOURCE" = false ]; then
+    mkdir -p "$DEBROOT"
+else
+    mkdir -p "$INSTALL_LOCATION"
+fi
 
 # Publish core application executables
 echo "Publishing core application..."
@@ -135,61 +151,74 @@ mv "$PAYLOAD"/*.pdb "$SYMBOLOUT" || exit 1
 echo "Build complete."
 
 #####################################################################
-# PACKING
+# PACKING AND INSTALLING
 #####################################################################
-echo "Packing Packaging.Linux..."
-# Cleanup any old archive files
-if [ -e "$TAROUT" ]; then
-    echo "Deleteing old archive '$TAROUT'..."
-    rm "$TAROUT"
-fi
-
-# Ensure the parent directory for the archive exists
-mkdir -p "$TAROUT" || exit 1
-
 # Set full read, write, execute permissions for owner and just read and execute permissions for group and other
 echo "Setting file permissions..."
 /bin/chmod -R 755 "$PAYLOAD" || exit 1
 
-# Build binaries tarball
-echo "Building binaries tarball..."
-pushd "$PAYLOAD"
-tar -czvf "$TARBALL" * || exit 1
-popd
+if [ "$INSTALL_FROM_SOURCE" = true ]; then
+    echo "Installing..."
 
-# Build symbols tarball
-echo "Building symbols tarball..."
-pushd "$SYMBOLOUT"
-tar -czvf "$SYMTARBALL" * || exit 1
-popd
+    # Install directories
+    INSTALL_TO="$INSTALL_LOCATION/share/gcm-core/"
+    LINK_TO="$INSTALL_LOCATION/bin/"
+else
+    echo "Packing Packaging.Linux..."
+    # Cleanup any old archive files
+    if [ -e "$TAROUT" ]; then
+        echo "Deleteing old archive '$TAROUT'..."
+        rm "$TAROUT"
+    fi
 
-# Build .deb
-INSTALL_TO="$DEBROOT/usr/local/share/gcm-core/"
-LINK_TO="$DEBROOT/usr/local/bin/"
-mkdir -p "$DEBROOT/DEBIAN" "$INSTALL_TO" "$LINK_TO" || exit 1
+    # Ensure the parent directory for the archive exists
+    mkdir -p "$TAROUT" || exit 1
 
-# make the debian control file
-cat >"$DEBROOT/DEBIAN/control" <<EOF
-Package: gcmcore
-Version: $VERSION
-Section: vcs
-Priority: optional
-Architecture: $ARCH
-Depends:
-Maintainer: GCM <gitfundamentals@github.com>
-Description: Cross Platform Git Credential Manager command line utility.
- GCM supports authentication with a number of Git hosting providers
- including GitHub, BitBucket, and Azure DevOps.
- For more information see https://aka.ms/gcm
+    # Build binaries tarball
+    echo "Building binaries tarball..."
+    pushd "$PAYLOAD"
+    tar -czvf "$TARBALL" * || exit 1
+    popd
+
+    # Build symbols tarball
+    echo "Building symbols tarball..."
+    pushd "$SYMBOLOUT"
+    tar -czvf "$SYMTARBALL" * || exit 1
+    popd
+
+    # Build .deb
+    INSTALL_TO="$DEBROOT/usr/local/share/gcm-core/"
+    LINK_TO="$DEBROOT/usr/local/bin/"
+
+    # make the debian control file
+    cat >"$DEBROOT/DEBIAN/control" <<EOF
+    Package: gcmcore
+    Version: $VERSION
+    Section: vcs
+    Priority: optional
+    Architecture: $ARCH
+    Depends:
+    Maintainer: GCM <gitfundamentals@github.com>
+    Description: Cross Platform Git Credential Manager command line utility.
+    GCM supports authentication with a number of Git hosting providers
+    including GitHub, BitBucket, and Azure DevOps.
+    For more information see https://aka.ms/gcm
 EOF
+
+    dpkg-deb --build "$DEBROOT" "$DEBPKG" || exit 1
+
+    echo "Pack complete."
+fi
+
+mkdir -p "$INSTALL_TO" "$LINK_TO" || exit 1
 
 # Copy all binaries and shared libraries to target installation location
 cp -R "$PAYLOAD"/* "$INSTALL_TO" || exit 1
 
 # Create symlink
-ln -s -r "$INSTALL_TO/git-credential-manager-core" \
-    "$LINK_TO/git-credential-manager-core" || exit 1
+if [ ! -f "$LINK_TO/git-credential-manager-core" ]; then
+    ln -s -r "$INSTALL_TO/git-credential-manager-core" \
+        "$LINK_TO/git-credential-manager-core" || exit 1
+fi
 
-dpkg-deb --build "$DEBROOT" "$DEBPKG" || exit 1
-
-echo "Pack complete."
+echo "Install complete."
