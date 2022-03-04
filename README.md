@@ -108,6 +108,7 @@ to install it.
 ```shell
 curl -o install-from-source.sh -L https://raw.githubusercontent.com/GitCredentialManager/git-credential-manager/main/src/linux/Packaging.Linux/install-from-source.sh &&
 sh ./install-from-source.sh
+git-credential-manager-core configure
 ```
 
 __Note:__ You will be prompted to enter your credentials so that the script

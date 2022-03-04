@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - ifs-test
 
 jobs:
   docker:
@@ -23,6 +24,4 @@ jobs:
     container: ${{matrix.vector.image}}
     steps:
       - uses: actions/checkout@v1
-      # Run install from source script, passing an empty string to
-      # `--sudo-cmd` since containers run as root.
-      - run: sh "src/linux/Packaging.Linux/install-from-source.sh" --sudo-cmd=""
+      - run: sh "${GITHUB_WORKSPACE}/src/linux/Packaging.Linux/install-from-source.sh" -y

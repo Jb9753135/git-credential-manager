@@ -163,6 +163,7 @@ if [ "$INSTALL_FROM_SOURCE" = true ]; then
     # Install directories
     INSTALL_TO="$INSTALL_LOCATION/share/gcm-core/"
     LINK_TO="$INSTALL_LOCATION/bin/"
+    MESSAGE="Install complete."
 else
     echo "Packing Packaging.Linux..."
     # Cleanup any old archive files
@@ -189,6 +190,7 @@ else
     # Build .deb
     INSTALL_TO="$DEBROOT/usr/local/share/gcm-core/"
     LINK_TO="$DEBROOT/usr/local/bin/"
+    MESSAGE="Pack complete."
 
     # make the debian control file
     cat >"$DEBROOT/DEBIAN/control" <<EOF
@@ -206,8 +208,6 @@ else
 EOF
 
     dpkg-deb --build "$DEBROOT" "$DEBPKG" || exit 1
-
-    echo "Pack complete."
 fi
 
 mkdir -p "$INSTALL_TO" "$LINK_TO" || exit 1
@@ -221,4 +221,4 @@ if [ ! -f "$LINK_TO/git-credential-manager-core" ]; then
         "$LINK_TO/git-credential-manager-core" || exit 1
 fi
 
-echo "Install complete."
+echo $MESSAGE

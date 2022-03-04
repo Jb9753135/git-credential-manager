@@ -1,101 +1,177 @@
 #!/bin/sh
 
-SUDO_CMD=sudo
+# halt execution immediately on failure
+# note there are some scenarios in which this will not exit;
+# see https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+# for additional details
+set -e
 
-# Parse script argument that allows users to customize sudo command
-for i in "$@"
-do
+is_ci=false
+for i in "$@"; do
     case "$i" in
-        --sudo-cmd=*)
-        SUDO_CMD="${i#*=}"
+        -y)
+        is_ci=true
         shift # past argument=value
         ;;
     esac
 done
 
+# in non-ci scenarios, advertise what we will be doing and
+# give user the option to exit
+if [ ! "$is_ci" ]; then
+    echo "This script will download, compile, and install Git Credential Manager to:
+
+    ~/usr/local/bin
+
+Git Credential Manager is licensed under the MIT License: https://aka.ms/gcm/license"
+
+    while true; do
+        read -p "Do you want to continue? [Y/n] " yn
+        case $yn in
+            [Yy]*|"")
+                break
+            ;;
+            [Nn]*)
+                exit
+            ;;
+            *) 
+                echo "Please answer yes or no."
+            ;;
+        esac
+    done
+fi
+
 install_shared_packages() {
     pkg_manager=$1
     install_verb=$2
 
-    local shared_packages="git curl apt-transport-https"
-    for package in $shared_packages
-    do
+    local shared_packages="git curl"
+    for package in $shared_packages; do
         if [ $pkg_manager = apk ]; then
-            $SUDO_CMD $pkg_manager $install_verb $package
+            $sudo_cmd $pkg_manager $install_verb $package
         else
-            $SUDO_CMD $pkg_manager $install_verb $package -y
+            $sudo_cmd $pkg_manager $install_verb $package -y
         fi
     done
 }
 
-download_dotnet_script() {
-    curl -o dotnet-install.sh -L https://dot.net/v1/dotnet-install.sh
+ensure_dotnet_installed() {
+    # get initial pieces of installed sdk version(s)
+    sdks=$(dotnet --list-sdks | cut -c 1-3)
+
+    # if we have a supported version installed, no need to
+    # download and run the script
+    supported_dotnet_versions="6.0 5.0"
+    for v in $supported_dotnet_versions; do
+        if [ $(echo $sdks | grep "$v") ]; then
+            return 0
+        fi
+    done
+
+    curl -LO https://dot.net/v1/dotnet-install.sh
     chmod +x ./dotnet-install.sh
+    bash -c "./dotnet-install.sh"
+
+    # since we have to run the dotnet install script with bash, dotnet isn't added
+    # to the process PATH, so we manually add it here
+    cd ~
+    export DOTNET_ROOT=$(pwd)/.dotnet
+    add_to_PATH $DOTNET_ROOT
 }
 
-distribution=$(sed -n '/^ID=/p' /etc/os-release | cut -c 4- | tr -d '"')
-case $distribution in
-    debian | ubuntu | linuxmint)
+add_to_PATH () {
+  for directory; do
+    if [ ! -d "$directory" ]; then
+        continue; # skip nonexistent directory
+    fi
+    case ":$PATH:" in
+        *":$directory:"*)
+            break
+        ;;
+        *)
+            export PATH=$PATH:$directory
+        ;;
+    esac
+  done
+}
+
+sudo_cmd=
+
+# if the user isn't root, we need to use `sudo` for certain commands
+# (e.g. installing packages)
+if [ -z "$sudo_cmd" ]; then
+    if [ `id -u` != 0 ]; then
+        sudo_cmd=sudo
+    fi
+fi
+
+eval "$(sed -n 's/^ID=/distribution=/p' /etc/os-release)"
+eval "$(sed -n 's/^VERSION_ID=/version=/p' /etc/os-release | tr -d '"')"
+case "$distribution" in
+    debian | ubuntu)
+        $sudo_cmd apt update
+        install_shared_packages apt install
+
         # add dotnet package repository/signing key
-        $SUDO_CMD apt update && $SUDO_CMD apt install wget -y
-        eval wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-        $SUDO_CMD dpkg -i packages-microsoft-prod.deb
+        $sudo_cmd apt update && $sudo_cmd apt install wget -y
+        curl -LO https://packages.microsoft.com/config/"$distribution"/"$version"/packages-microsoft-prod.deb
+        $sudo_cmd dpkg -i packages-microsoft-prod.deb
         rm packages-microsoft-prod.deb
 
         # proactively install tzdata to prevent prompts
-        $SUDO_CMD apt update
         export DEBIAN_FRONTEND=noninteractive
-        $SUDO_CMD apt-get install -y --no-install-recommends tzdata
+        $sudo_cmd apt install -y --no-install-recommends tzdata
 
+        # install dotnet packages and dependencies
+        $sudo_cmd apt update
+        $sudo_cmd apt install dotnet-sdk-5.0 dpkg-dev apt-transport-https -y
+    ;;
+    linuxmint)
+        $sudo_cmd apt update
         install_shared_packages apt install
 
-        # install dotnet packages
-        $SUDO_CMD apt install dotnet-sdk-5.0 dpkg-dev -y
+        # install dotnet packages and dependencies
+        $sudo_cmd apt install libc6 libgcc1 libgssapi-krb5-2 libssl1.1 libstdc++6 zlib1g libicu66 -y
+        ensure_dotnet_installed
     ;;
     fedora | centos | rhel)
-        if [ $distribution = centos ]; then
+        if [ $distribution == "centos" ] && [ $is_ci ]; then
             sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*
             sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
         fi
 
-        $SUDO_CMD dnf update -y
+        $sudo_cmd dnf update -y
         install_shared_packages dnf install
 
         # install dotnet/gcm dependencies
-        $SUDO_CMD dnf install krb5-libs libicu openssl-libs zlib findutils which -y
+        $sudo_cmd dnf install krb5-libs libicu openssl-libs zlib findutils which bash -y
 
-        download_dotnet_script
-        source ./dotnet-install.sh
+        ensure_dotnet_installed
     ;;
     alpine)
-        $SUDO_CMD apk update
+        $sudo_cmd apk update
         install_shared_packages apk add
 
         # install dotnet/gcm dependencies
-        $SUDO_CMD apk add icu-libs krb5-libs libgcc libintl libssl1.1 libstdc++ zlib which bash coreutils gcompat 
+        $sudo_cmd apk add icu-libs krb5-libs libgcc libintl libssl1.1 libstdc++ zlib which bash coreutils gcompat
 
-        download_dotnet_script
-        bash -c "./dotnet-install.sh"
-
-        # since we have to run the script with bash, dotnet isn't added
-        # to the process PATH, so we manually add here
-        cd ~
-        export DOTNET_ROOT=$(pwd)/.dotnet
-        export PATH=$PATH:$DOTNET_ROOT
+        ensure_dotnet_installed
     ;;
     *)
-        echo "ERROR: Unsupported Linux distribution"
+        echo "ERROR: Unsupported Linux distribution: $distribution"
         exit
     ;;
 esac
 
-# clone and build source
-if [ ! -d git-credential-manager ]; then
-    git clone https://github.com/ldennington/git-credential-manager.git || exit
+# detect if the script is part of a full source checkout or standalone instead
+script_path="$(cd "$(dirname "$0")" && pwd)"
+toplevel_path="${script_path%/src/linux/Packaging.Linux}"
+if [ "z$script_path" = "z$toplevel_path" ] || [ ! -f "$toplevel_path/Git-Credential-Manager.sln" ]; then
+    toplevel_path="$PWD/git-credential-manager"
+    test -d "$toplevel_path" || git clone https://github.com/ldennington/git-credential-manager
 fi
-cd git-credential-manager
-$SUDO_CMD dotnet build ./src/linux/Packaging.Linux/Packaging.Linux.csproj -c Release -p:InstallFromSource=true
-export PATH=$PATH:$HOME/usr/local/bin
 
-# configure gcm
-git-credential-manager-core configure
+cd "$toplevel_path"
+git checkout ifs-test
+$sudo_cmd dotnet build ./src/linux/Packaging.Linux/Packaging.Linux.csproj -c Release -p:InstallFromSource=true
+add_to_PATH $HOME/usr/local/bin
