@@ -168,9 +168,10 @@ script_path="$(cd "$(dirname "$0")" && pwd)"
 toplevel_path="${script_path%/src/linux/Packaging.Linux}"
 if [ "z$script_path" = "z$toplevel_path" ] || [ ! -f "$toplevel_path/Git-Credential-Manager.sln" ]; then
     toplevel_path="$PWD/git-credential-manager"
-    test -d "$toplevel_path" || git clone https://github.com/GitCredentialManager/git-credential-manager
+    test -d "$toplevel_path" || git clone https://github.com/ldennington/git-credential-manager
 fi
 
 cd "$toplevel_path"
+git checkout temp
 $sudo_cmd dotnet build ./src/linux/Packaging.Linux/Packaging.Linux.csproj -c Release -p:InstallFromSource=true
 add_to_PATH $HOME/usr/local/bin

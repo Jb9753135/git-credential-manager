@@ -83,7 +83,7 @@ if [ ! "$INSTALL_FROM_SOURCE" ]; then
     DEBROOT="$DEBOUT/root"
     DEBPKG="$DEBOUT/gcmcore-linux_$ARCH.$VERSION.deb"
 else
-    INSTALL_LOCATION="$HOME/usr/local"
+    INSTALL_LOCATION="/usr/local"
 fi
 
 # Cleanup payload directory
@@ -104,7 +104,9 @@ mkdir -p "$PAYLOAD" "$SYMBOLOUT"
 if [ ! "$INSTALL_FROM_SOURCE" ]; then
     mkdir -p "$DEBROOT"
 else
-    mkdir -p "$INSTALL_LOCATION"
+    if [ ! -d "$INSTALL_LOCATION" ]; then
+        mkdir -p "$INSTALL_LOCATION"
+    fi
 fi
 
 # Publish core application executables
@@ -210,7 +212,13 @@ EOF
     dpkg-deb --build "$DEBROOT" "$DEBPKG" || exit 1
 fi
 
-mkdir -p "$INSTALL_TO" "$LINK_TO" || exit 1
+if [ ! -d "$INSTALL_TO" ]; then
+    mkdir -p "$INSTALL_TO"
+fi
+
+if [ ! -d "$LINK_TO" ]; then
+    mkdir -p "$LINK_TO"
+fi
 
 # Copy all binaries and shared libraries to target installation location
 cp -R "$PAYLOAD"/* "$INSTALL_TO" || exit 1
