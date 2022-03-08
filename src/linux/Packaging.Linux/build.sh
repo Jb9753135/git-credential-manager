@@ -19,7 +19,7 @@ make_absolute () {
 # Building
 #####################################################################
 echo "Building Packaging.Linux..."
-
+INSTALL_FROM_SOURCE=false
 # Parse script arguments
 for i in "$@"
 do
@@ -83,7 +83,7 @@ if [ ! "$INSTALL_FROM_SOURCE" ]; then
     DEBROOT="$DEBOUT/root"
     DEBPKG="$DEBOUT/gcmcore-linux_$ARCH.$VERSION.deb"
 else
-    INSTALL_LOCATION="/usr/local"
+    usr/local="/usr/local"
 fi
 
 # Cleanup payload directory
@@ -104,8 +104,8 @@ mkdir -p "$PAYLOAD" "$SYMBOLOUT"
 if [ ! "$INSTALL_FROM_SOURCE" ]; then
     mkdir -p "$DEBROOT"
 else
-    if [ ! -d "$INSTALL_LOCATION" ]; then
-        mkdir -p "$INSTALL_LOCATION"
+    if [ ! -d "$usr/local" ]; then
+        mkdir -p "$usr/local"
     fi
 fi
 
@@ -163,8 +163,8 @@ if [ "$INSTALL_FROM_SOURCE" ]; then
     echo "Installing..."
 
     # Install directories
-    INSTALL_TO="$INSTALL_LOCATION/share/gcm-core/"
-    LINK_TO="$INSTALL_LOCATION/bin/"
+    INSTALL_TO="$usr/local/share/gcm-core/"
+    LINK_TO="$usr/local/bin/"
     MESSAGE="Install complete."
 else
     echo "Packing Packaging.Linux..."
