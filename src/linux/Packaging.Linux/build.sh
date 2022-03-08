@@ -19,7 +19,6 @@ make_absolute () {
 # Building
 #####################################################################
 echo "Building Packaging.Linux..."
-INSTALL_FROM_SOURCE=false
 # Parse script arguments
 for i in "$@"
 do
@@ -83,7 +82,7 @@ if [ ! "$INSTALL_FROM_SOURCE" ]; then
     DEBROOT="$DEBOUT/root"
     DEBPKG="$DEBOUT/gcmcore-linux_$ARCH.$VERSION.deb"
 else
-    usr/local="/usr/local"
+    INSTALL_LOCATION="~/usr/local"
 fi
 
 # Cleanup payload directory
@@ -104,9 +103,7 @@ mkdir -p "$PAYLOAD" "$SYMBOLOUT"
 if [ ! "$INSTALL_FROM_SOURCE" ]; then
     mkdir -p "$DEBROOT"
 else
-    if [ ! -d "$usr/local" ]; then
-        mkdir -p "$usr/local"
-    fi
+    mkdir -p "$INSTALL_LOCATION"
 fi
 
 # Publish core application executables
@@ -163,8 +160,8 @@ if [ "$INSTALL_FROM_SOURCE" ]; then
     echo "Installing..."
 
     # Install directories
-    INSTALL_TO="$usr/local/share/gcm-core/"
-    LINK_TO="$usr/local/bin/"
+    INSTALL_TO="$INSTALL_LOCATION/share/gcm-core/"
+    LINK_TO="$INSTALL_LOCATION/bin/"
     MESSAGE="Install complete."
 else
     echo "Packing Packaging.Linux..."
@@ -212,13 +209,7 @@ EOF
     dpkg-deb --build "$DEBROOT" "$DEBPKG" || exit 1
 fi
 
-if [ ! -d "$INSTALL_TO" ]; then
-    mkdir -p "$INSTALL_TO"
-fi
-
-if [ ! -d "$LINK_TO" ]; then
-    mkdir -p "$LINK_TO"
-fi
+mkdir -p "$INSTALL_TO" "$LINK_TO" || exit 1
 
 # Copy all binaries and shared libraries to target installation location
 cp -R "$PAYLOAD"/* "$INSTALL_TO" || exit 1
