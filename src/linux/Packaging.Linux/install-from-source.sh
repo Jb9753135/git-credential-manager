@@ -21,7 +21,7 @@ done
 if [ ! "$is_ci" ]; then
     echo "This script will download, compile, and install Git Credential Manager to:
 
-    ~/usr/local/bin
+    /usr/local/bin
 
 Git Credential Manager is licensed under the MIT License: https://aka.ms/gcm/license"
 
@@ -174,4 +174,4 @@ fi
 cd "$toplevel_path"
 git checkout temp
 $sudo_cmd dotnet build ./src/linux/Packaging.Linux/Packaging.Linux.csproj -c Release -p:InstallFromSource=true
-add_to_PATH $HOME/usr/local/bin
+add_to_PATH /usr/local/bin
