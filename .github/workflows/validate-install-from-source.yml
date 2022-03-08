@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - temp
+      - was-it-a-fluke
 
 jobs:
   docker:

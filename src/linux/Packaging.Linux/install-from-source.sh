@@ -172,6 +172,6 @@ if [ "z$script_path" = "z$toplevel_path" ] || [ ! -f "$toplevel_path/Git-Credent
 fi
 
 cd "$toplevel_path"
-git checkout temp
+git checkout was-it-a-fluke
 $sudo_cmd dotnet build ./src/linux/Packaging.Linux/Packaging.Linux.csproj -c Release -p:InstallFromSource=true
 add_to_PATH /usr/local/bin
