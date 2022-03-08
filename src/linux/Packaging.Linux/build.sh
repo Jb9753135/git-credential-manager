@@ -181,7 +181,7 @@ if ! "$INSTALL_FROM_SOURCE"; then
 
     # Build .deb
     INSTALL_TO="$DEBROOT/usr/local/share/gcm-core/"
-    LINK_TO="$DEBROOT/usr/local/bin/"
+    LINK_TO="$DEBROOT/usr/bin/"
     mkdir -p "$DEBROOT/DEBIAN" "$INSTALL_TO" "$LINK_TO" || exit 1
 
 # make the debian control file
@@ -208,7 +208,7 @@ else
 
     # Install directories
     INSTALL_TO="$INSTALL_LOCATION/share/gcm-core/"
-    LINK_TO="$INSTALL_LOCATION/local/bin/"
+    LINK_TO="$INSTALL_LOCATION/bin/"
     MESSAGE="Install complete."
 fi
 
