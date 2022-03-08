@@ -174,3 +174,4 @@ fi
 cd "$toplevel_path"
 git checkout test1
 $sudo_cmd dotnet build ./src/linux/Packaging.Linux/Packaging.Linux.csproj -c Release -p:InstallFromSource=true
+add_to_PATH "/usr/local/bin"
