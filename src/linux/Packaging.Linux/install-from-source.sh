@@ -47,6 +47,11 @@ install_shared_packages() {
 
     local shared_packages="git curl"
     for package in $shared_packages; do
+        # ensure we don't stomp on existing installations
+        if [ ! -z $(which $package) ]; then
+            continue
+        fi
+
         if [ $pkg_manager = apk ]; then
             $sudo_cmd $pkg_manager $install_verb $package
         else
@@ -56,27 +61,30 @@ install_shared_packages() {
 }
 
 ensure_dotnet_installed() {
+    if [ -z $(verify_existing_dotnet_installation) ]; then
+        curl -LO https://dot.net/v1/dotnet-install.sh
+        chmod +x ./dotnet-install.sh
+        bash -c "./dotnet-install.sh"
+
+        # since we have to run the dotnet install script with bash, dotnet isn't added
+        # to the process PATH, so we manually add it here
+        cd ~
+        export DOTNET_ROOT=$(pwd)/.dotnet
+        add_to_PATH $DOTNET_ROOT
+    fi
+}
+
+verify_existing_dotnet_installation() {
     # get initial pieces of installed sdk version(s)
     sdks=$(dotnet --list-sdks | cut -c 1-3)
 
-    # if we have a supported version installed, no need to
-    # download and run the script
+    # if we have a supported version installed, return
     supported_dotnet_versions="6.0 5.0"
     for v in $supported_dotnet_versions; do
         if [ $(echo $sdks | grep "$v") ]; then
-            return
+            return $sdks
         fi
     done
-
-    curl -LO https://dot.net/v1/dotnet-install.sh
-    chmod +x ./dotnet-install.sh
-    bash -c "./dotnet-install.sh"
-
-    # since we have to run the dotnet install script with bash, dotnet isn't added
-    # to the process PATH, so we manually add it here
-    cd ~
-    export DOTNET_ROOT=$(pwd)/.dotnet
-    add_to_PATH $DOTNET_ROOT
 }
 
 add_to_PATH () {
@@ -122,11 +130,13 @@ case "$distribution" in
         export DEBIAN_FRONTEND=noninteractive
         $sudo_cmd apt install -y --no-install-recommends tzdata
 
-        # install dotnet packages and dependencies
-        $sudo_cmd apt update
-        $sudo_cmd apt install apt-transport-https -y
-        $sudo_cmd apt update
-        $sudo_cmd apt install dotnet-sdk-5.0 dpkg-dev -y
+        # install dotnet packages and dependencies if needed
+        if [ -z $(verify_existing_dotnet_installation) ]; then
+            $sudo_cmd apt update
+            $sudo_cmd apt install apt-transport-https -y
+            $sudo_cmd apt update
+            $sudo_cmd apt install dotnet-sdk-5.0 dpkg-dev -y
+        fi
     ;;
     linuxmint)
         $sudo_cmd apt update
