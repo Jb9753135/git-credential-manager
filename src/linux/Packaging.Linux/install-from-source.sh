@@ -61,7 +61,7 @@ install_shared_packages() {
 }
 
 ensure_dotnet_installed() {
-    if [ -z $(verify_existing_dotnet_installation) ]; then
+    if [ -z "$(verify_existing_dotnet_installation)" ]; then
         curl -LO https://dot.net/v1/dotnet-install.sh
         chmod +x ./dotnet-install.sh
         bash -c "./dotnet-install.sh"
@@ -82,7 +82,7 @@ verify_existing_dotnet_installation() {
     supported_dotnet_versions="6.0 5.0"
     for v in $supported_dotnet_versions; do
         if [ $(echo $sdks | grep "$v") ]; then
-            return $sdks
+            echo $sdks
         fi
     done
 }
@@ -131,7 +131,7 @@ case "$distribution" in
         $sudo_cmd apt install -y --no-install-recommends tzdata
 
         # install dotnet packages and dependencies if needed
-        if [ -z $(verify_existing_dotnet_installation) ]; then
+        if [ -z "$(verify_existing_dotnet_installation)" ]; then
             $sudo_cmd apt update
             $sudo_cmd apt install apt-transport-https -y
             $sudo_cmd apt update
