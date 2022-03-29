@@ -8,9 +8,10 @@ usage() {
     cat <<EOM
 $(basename $0) - Handy script to notarize an installer package (.pkg)
 Usage: $(basename $0) -id <apple_id> -p <password> -pkg <path_to_pkg>
-        -id  or --appleid         # A valid Apple ID email address, account must have correct certificates available
-        -p   or --password        # The password for the specified Apple ID or Apple One-Time password (to avoid 2FA)
-        -pkg or --package         # The path to an already signed flat-package
+        -id         or --appleid         # A valid Apple ID email address, account must have correct certificates available
+        -p          or --password        # The password for the specified Apple ID or Apple One-Time password (to avoid 2FA)
+        -pkg        or --package         # The path to an already signed flat-package
+        -pkg-info   or --package-info    # The path to the directory containing the PackageInfo file (if applicable)
 EOM
     exit 0
 }
@@ -18,6 +19,7 @@ EOM
 declare arg_AppleId=""
 declare arg_Password=""
 declare arg_PackagePath=""
+declare arg_PackageInfoPath=""
 
 [ $# -eq 0 ] && { usage; }
 
@@ -43,6 +45,10 @@ function parseArgs() {
             arg_PackagePath="$2"
             shift
             ;;
+        --package-info | -pkg-info)
+            arg_PackageInfoPath="$2"
+            shift
+            ;;
         *)
             arg_Positional+=("$1")
             shift
@@ -53,13 +59,13 @@ function parseArgs() {
 
 function getPackageId {
   local PKG=$(cd "$(dirname "$1")"; pwd)/$(basename "$1")
-  local PKGDEST=$(mktemp -d | tr -d '\r')
-  xar -x -f "${PKG}" --exclude '^(?:(?!PackageInfo).)*$' -C "${PKGDEST}"
-  if [ ! -e "${PKGDEST}/PackageInfo" ]; then
+  local PKGDEST="$TMPDIR/pkg"
+  pkgutil --expand "${PKG}" "${PKGDEST}"
+  if [ ! -e "${PKGDEST}/${arg_PackageInfoPath}/PackageInfo" ]; then
       echo "error: can't find 'PackageInfo'; maybe meta-package"
       return 1
-  fi
-  cat "${PKGDEST}/PackageInfo" | tr -d '\r' | tr -d '\n' | sed 's:^.*identifier="\([^"]*\)".*$:\1:g'
+   fi
+  cat "${PKGDEST}/${arg_PackageInfoPath}/PackageInfo" | tr -d '\r' | tr -d '\n' | sed 's:^.*identifier="\([^"]*\)".*$:\1:g'
   rm -rf "${PKGDEST}"
 }
 
@@ -83,7 +89,7 @@ fi
 declare bundle_id=$(getPackageId ${arg_PackagePath})
 
 if [[ -z $bundle_id ]]; then
-    echo "[ERROR] No identifier found in package info!"
+    echo "[ERROR] package identifier not found!"
     exit 1
 fi
 
