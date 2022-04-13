@@ -9,7 +9,9 @@ steps:
     displayName: Compile common code and macOS Helpers
     inputs:
       command: build
-      projects: 'Git-Credential-Manager.sln'
+      projects: |
+      src/osx/Installer.Mac/*.csproj
+      src/osx/SignFiles.Mac/*.csproj
       arguments: '--configuration=Mac$(configuration) --runtime=$(osxRuntime)'
 
   - task: DotNetCoreCLI@2
