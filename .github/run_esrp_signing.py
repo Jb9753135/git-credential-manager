@@ -1,45 +1,49 @@
+import argparse
 import json
 import os
 import glob
 import pprint
+import string
 import subprocess
 import sys
 import re
 
+parser = argparse.ArgumentParser(description='Sign binaries for Windows, macOS, and Linux')
+parser.add_argument('path', help='Path to file for signing')
+parser.add_argument('keycode', help='Platform-specific key code for signing')
+parser.add_argument('opcode', help='Platform-specific operation code for signing')
+# TODO: Make this more robust
+parser.add_argument('--params', help='Parameters for signing')
+args = parser.parse_args()
+
+params = []
+if args.params is not None:
+	params = str.split(args.params)
+
 esrp_tool = os.path.join("esrp", "tools", "EsrpClient.exe")
 
 aad_id = os.environ['AZURE_AAD_ID'].strip()
+aad_id_temp = os.environ['AZURE_AAD_ID_TEMP'].strip()
 workspace = os.environ['GITHUB_WORKSPACE'].strip()
 
-source_root_location = os.path.join(workspace, "deb", "Release")
-destination_location = os.path.join(workspace)
-
-files = glob.glob(os.path.join(source_root_location, "*.deb"))
-
-print("Found files:")
-pprint.pp(files)
-
-if len(files) < 1 or not files[0].endswith(".deb"):
-	print("Error: cannot find .deb to sign")
-	exit(1)
-
-file_to_sign = os.path.basename(files[0])
+source_location = os.path.dirname(args.path)
+file_to_sign = os.path.basename(args.path)
 
 auth_json = {
-	"Version": "1.0.0",
-	"AuthenticationType": "AAD_CERT",
-	"TenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
-	"ClientId": aad_id,
-	"AuthCert": {
-		"SubjectName": f"CN={aad_id}.microsoft.com",
-		"StoreLocation": "LocalMachine",
-		"StoreName": "My",
-	},
-	"RequestSigningCert": {
-		"SubjectName": f"CN={aad_id}",
-		"StoreLocation": "LocalMachine",
-		"StoreName": "My",
-	}
+    "Version": "1.0.0",
+    "AuthenticationType": "AAD_CERT",
+    "TenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
+    "ClientId": f"{aad_id}",
+    "AuthCert": {
+            "SubjectName": f"CN={aad_id_temp}.microsoft.com",
+            "StoreLocation": "LocalMachine",
+            "StoreName": "My"
+    },
+    "RequestSigningCert": {
+            "SubjectName": f"CN={aad_id}",
+            "StoreLocation": "LocalMachine",
+            "StoreName": "My"
+    }
 }
 
 input_json = {
@@ -47,9 +51,9 @@ input_json = {
 	"SignBatches": [
 		{
 			"SourceLocationType": "UNC",
-			"SourceRootDirectory": source_root_location,
+			"SourceRootDirectory": source_location,
 			"DestinationLocationType": "UNC",
-			"DestinationRootDirectory": destination_location,
+			"DestinationRootDirectory": workspace,
 			"SignRequestFiles": [
 				{
 					"CustomerCorrelationId": "01A7F55F-6CDD-4123-B255-77E6F212CDAD",
@@ -60,8 +64,8 @@ input_json = {
 			"SigningInfo": {
 				"Operations": [
 					{
-						"KeyCode": "CP-450779-Pgp",
-						"OperationCode": "LinuxSign",
+						"KeyCode": f"{args.keycode}",
+						"OperationCode": f"{args.opcode}",
 						"Parameters": {},
 						"ToolName": "sign",
 						"ToolVersion": "1.0",
@@ -72,10 +76,17 @@ input_json = {
 	]
 }
 
+# add parameters to input.json (e.g. enabling the hardened runtime for macOS)
+if len(params) > 0:
+	i = 0
+	while i < len(params):
+		input_json["SignBatches"][0]["SigningInfo"]["Operations"][0]["Parameters"][params[i]] = params[i + 1]
+		i += 2
+
 policy_json = {
 	"Version": "1.0.0",
 	"Intent": "production release",
-	"ContentType": "Debian package",
+	"ContentType": "macOS payload",
 }
 
 configs = [
@@ -106,7 +117,7 @@ log = re.sub(r'^.+Uploading.*to\s*destinationUrl\s*(.+?),.+$',
     '***', 
     result.stdout,
     flags=re.IGNORECASE|re.MULTILINE)
-printf(log)
+print(log)
 
 if result.returncode != 0:
 	print("Failed to run ESRPClient.exe")
@@ -116,7 +127,3 @@ if os.path.isfile(esrp_out):
 	print("ESRP output json:")
 	with open(esrp_out, 'r') as fp:
 		pprint.pp(json.load(fp))
-
-signed_file = os.path.join(destination_location, "Signed", file_to_sign)
-if os.path.isfile(signed_file):
-	print(f"Success!\nSigned {signed_file}")
