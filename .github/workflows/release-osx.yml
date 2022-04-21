@@ -1,0 +1,47 @@
+name: release-osx
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ release ]
+
+jobs:
+  build-and-lay-out:
+    name: Build and lay out macOS payload
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+
+    - name: Set up dotnet
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 6.0.201
+    
+    - name: Install dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: |
+        dotnet build --configuration=MacRelease
+    
+    - name: Run macOS unit tests
+      run: |
+        dotnet test --configuration=MacRelease
+
+    - name: Lay out payload and symbols
+      run: |
+        src/osx/Installer.Mac/layout.sh --configuration=MacRelease --output=out/osx/payload --symbol-output=out/osx/symbols
+
+    - name: Upload payload
+      uses: actions/upload-artifact@v2
+      with:
+        name: macos-payload
+        path: out/osx/payload
+    
+    - name: Upload symbols
+      uses: actions/upload-artifact@v2
+      with:
+        name: macos-symbols
+        path: out/osx/symbols
