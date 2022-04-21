@@ -41,7 +41,7 @@ fi
 OUTDIR="$INSTALLER_OUT/pkg/$CONFIGURATION"
 PAYLOAD="$OUTDIR/payload"
 COMPONENTDIR="$OUTDIR/components"
-COMPONENTOUT="$COMPONENTDIR/com.microsoft.gitcredentialmanager.component.pkg"
+COMPONENTOUT="$COMPONENTDIR/com.github.gitcredentialmanager"
 DISTOUT="$OUTDIR/gcmcore-osx-$VERSION.pkg"
 
 # Layout and pack
