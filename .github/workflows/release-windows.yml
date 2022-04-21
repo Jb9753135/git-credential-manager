@@ -74,9 +74,9 @@ jobs:
     - name: Prepare final artifacts
       shell: pwsh
       run: |
-        md -p publish/payload publish/payload.sym
+        md -p 'publish\payload', 'publish\payload.sym'
         xcopy signed\*.exe publish\
-        xcopy out\windows\Installer.Windows\bin\Release\net472\win-x86\* publish\payload\
+        xcopy out\windows\Payload.Windows\bin\Release\net472\win-x86\ publish\payload\
         xcopy publish\payload\*.pdb .\publish\payload.sym\
         Compress-Archive -Path publish\payload publish\gcm-win-x86-$env:GitBuildVersionSimple.zip
         Compress-Archive -Path publish\payload.sym publish\symbols-win-x86.zip

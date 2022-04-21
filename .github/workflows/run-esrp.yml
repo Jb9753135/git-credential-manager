@@ -1,0 +1,91 @@
+name: Run ESRP
+
+on:
+  workflow_call:
+    inputs:
+      artifactName:
+        required: true
+        type: string
+      fileToSign:
+        required: true
+        type: string
+      params:
+        required: false
+        type: string
+    secrets:
+      azureCredentials:
+        required: true
+      azureStorageKey:
+        required: true
+      azureVault:
+        required: true
+      authCert:
+        required: true
+      requestSigningCert:
+        required: true
+      azureAadId:
+        required: true
+      azureAadIdTemp:
+        required: true
+      keyCode:
+        required: true
+      operationCode:
+        required: true
+
+jobs:
+  run-esrp:
+    # ESRP service requires signing to run on Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: migrate-release-workflows
+    
+    - name: Download artifact to sign
+      uses: actions/download-artifact@v2
+      with:
+        name: ${{ inputs.artifactName }}
+        path: artifact
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.azureCredentials }}
+        
+    - name: Install ESRP client
+      shell: pwsh
+      env:
+        AZ_KEY: ${{ secrets.azureStorageKey }}
+      run: |
+        az storage blob download --file esrp.zip --account-key "$env:AZ_KEY" --account-name gcmesrp --container microsoft-esrp-client --name microsoft.esrpclient.1.2.76.nupkg
+        Expand-Archive -Path esrp.zip -DestinationPath .\esrp
+    
+    - name: Install certificates
+      shell: pwsh
+      env:
+        AZ_VAULT: ${{ secrets.azureVault }}
+        AUTH_CERT: ${{ secrets.authCert }}
+        REQUEST_SIGNING_CERT: ${{ secrets.requestSigningCert }}
+      run: |
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+    
+    - name: Run ESRP client
+      shell: pwsh
+      env:
+        AZURE_AAD_ID: ${{ secrets.azureAadId }}
+        AZURE_AAD_ID_TEMP: ${{ secrets.azureAadIdTemp }}
+      run: |
+        python .github\run_esrp_signing.py "artifact\${{ inputs.fileToSign }}" "${{ secrets.keyCode }}" "${{ secrets.operationCode }}" --params "${{ inputs.params }}"
+    
+    - name: Upload signed artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ inputs.artifactToSign }}-signed
+        path: |
+          signed/*
