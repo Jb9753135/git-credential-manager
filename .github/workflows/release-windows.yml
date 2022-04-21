@@ -1,0 +1,88 @@
+name: windows-release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, release, migrate-release-workflows ]
+
+jobs:
+  build-sign-publish:
+    name: Build, Sign, and Publish Windows artifacts
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: migrate-release-workflows
+
+    - name: Set up dotnet
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 6.0.201
+
+    # Install Nerdbank.GitVersioning
+    - uses: dotnet/nbgv@master
+      with:
+        setCommonVars: true
+    
+    - name: Install dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: |
+        dotnet build --configuration=WindowsRelease
+
+    - name: Run Windows unit tests
+      run: |
+        dotnet test --configuration=WindowsRelease
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Install ESRP client
+      shell: pwsh
+      env:
+        AZ_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+      run: |
+        az storage blob download --file esrp.zip --account-key "$env:AZ_KEY" --account-name gcmesrp --container microsoft-esrp-client --name microsoft.esrpclient.1.2.76.nupkg
+        Expand-Archive -Path esrp.zip -DestinationPath .\esrp
+    
+    - name: Install certificates
+      shell: pwsh
+      env:
+        AZ_VAULT: ${{ secrets.AZURE_VAULT }}
+        AUTH_CERT: ${{ secrets.AZURE_VAULT_AUTH_CERT_NAME }}
+        REQUEST_SIGNING_CERT: ${{ secrets.AZURE_VAULT_REQUEST_SIGNING_CERT_NAME }}
+      run: |
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+    
+    - name: Run ESRP client
+      shell: pwsh
+      env:
+        AZURE_AAD_ID: ${{ secrets.AZURE_AAD_ID }}
+        AZURE_AAD_ID_TEMP: ${{ secrets.AAD_ID_TEMP }}
+      run: |
+        python .github\run_esrp_signing.py .\out\windows\Installer.Windows\bin\Release\net472\gcmcore-win-x86-$env:GitBuildVersionSimple.exe ​​CP-230012 SigntoolSign
+    
+    - name: Prepare final artifacts
+      shell: pwsh
+      run: |
+        xcopy .\signed\*.exe .\publish\
+        xcopy .\out\windows\Installer.Windows\bin\Release\net472\win-x86 .\publish\payload
+        mkdir .\publish\payload.sym\
+        move  .\publish\payload\*.pdb .\publish\payload.sym\
+        Compress-Archive -Path .\publish\payload .\publish\gcm-win-x86-$env:GitBuildVersionSimple.zip
+        Compress-Archive -Path .\publish\payload.sym .\publish\symbols-win-x86.zip
+    
+    - name: Publish final artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: windows-signed-installer
+        path: ./publish/*
