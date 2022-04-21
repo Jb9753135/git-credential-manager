@@ -69,17 +69,17 @@ jobs:
         AZURE_AAD_ID: ${{ secrets.AZURE_AAD_ID }}
         AZURE_AAD_ID_TEMP: ${{ secrets.AAD_ID_TEMP }}
       run: |
-        python .github\run_esrp_signing.py .\out\windows\Installer.Windows\bin\Release\net472\gcmcore-win-x86-$env:GitBuildVersionSimple.exe ​​CP-230012 SigntoolSign
+        python .github\run_esrp_signing.py .\out\windows\Installer.Windows\bin\Release\net472\gcmcore-win-x86-$env:GitBuildVersionSimple.exe CP-230012 SigntoolSign --params 'OpusName, Microsoft, OpusInfo, http://www.microsoft.com, FileDigest, /fd "SHA256", PageHash, /NPH, TimeStamp, /tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256'
     
     - name: Prepare final artifacts
       shell: pwsh
       run: |
-        xcopy .\signed\*.exe .\publish\
-        xcopy .\out\windows\Installer.Windows\bin\Release\net472\win-x86 .\publish\payload
-        mkdir .\publish\payload.sym\
-        move  .\publish\payload\*.pdb .\publish\payload.sym\
-        Compress-Archive -Path .\publish\payload .\publish\gcm-win-x86-$env:GitBuildVersionSimple.zip
-        Compress-Archive -Path .\publish\payload.sym .\publish\symbols-win-x86.zip
+        md -p publish/payload publish/payload.sym
+        xcopy signed\*.exe publish\
+        xcopy out\windows\Installer.Windows\bin\Release\net472\win-x86\* publish\payload\
+        xcopy publish\payload\*.pdb .\publish\payload.sym\
+        Compress-Archive -Path publish\payload publish\gcm-win-x86-$env:GitBuildVersionSimple.zip
+        Compress-Archive -Path publish\payload.sym publish\symbols-win-x86.zip
     
     - name: Publish final artifacts
       uses: actions/upload-artifact@v2

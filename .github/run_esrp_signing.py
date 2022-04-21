@@ -18,7 +18,7 @@ args = parser.parse_args()
 
 params = []
 if args.params is not None:
-	params = str.split(args.params)
+	params = args.params.split(", ")
 
 esrp_tool = os.path.join("esrp", "tools", "EsrpClient.exe")
 
