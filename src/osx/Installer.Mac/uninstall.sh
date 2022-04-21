@@ -25,7 +25,7 @@ fi
 
 # Forget package installation/delete receipt
 echo "Removing installation receipt..."
-pkgutil --forget com.microsoft.gitcredentialmanager
+pkgutil --forget com.github.gitcredentialmanager
 
 # Remove application files
 if [ -d "$THISDIR" ]
