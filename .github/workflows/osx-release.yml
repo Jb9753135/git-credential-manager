@@ -3,14 +3,14 @@ name: osx-release
 on:
   workflow_dispatch:
   push:
-    branches: [ main, release, sign-and-notarize ]
+    branches: [ main, release ]
 
 jobs:
   build-and-lay-out:
     name: Build and lay out macOS payload
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
 
@@ -28,7 +28,7 @@ jobs:
 
     - name: Lay out payload and symbols
       run: |
-        src/osx/Installer.Mac/layout.sh --configuration=MacRelease --runtime=osx-x64 --output=out/osx/payload --symbol-output=out/osx/${{ matrix.runtime }}/symbols
+        src/osx/Installer.Mac/layout.sh --configuration=MacRelease --runtime=osx-x64 --output=out/osx/payload --symbol-output=out/osx/osx-x64/symbols
 
     - name: Upload payload
       uses: actions/upload-artifact@v2
@@ -40,17 +40,16 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: macos-symbols
-        path: out/osx/symbols
+        path: out/osx/symbols  
     
   sign-payload:
-    name: Sign payload
+    name: Sign macOS payload
+    # ESRP service requires signing to run on Windows
     runs-on: windows-latest
     needs: build-and-lay-out
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
-      with:
-        ref: sign-and-notarize
 
     - name: Set up python
       uses: actions/setup-python@v2
@@ -86,13 +85,13 @@ jobs:
       env:
         AZ_VAULT: ${{ secrets.AZURE_VAULT }}
         AUTH_CERT: ${{ secrets.AZURE_VAULT_AUTH_CERT_NAME }}
-        ESRP_CERT: ${{ secrets.AZURE_VAULT_ESRP_CERT_NAME }}
+        REQUEST_SIGNING_CERT: ${{ secrets.AZURE_VAULT_REQUEST_SIGNING_CERT_NAME }}
       run: |
         az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
         certutil -f -importpfx out.pfx
         Remove-Item out.pfx
 
-        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:ESRP_CERT" --file out.pfx
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
         certutil -f -importpfx out.pfx
         Remove-Item out.pfx
     
@@ -112,14 +111,13 @@ jobs:
           signed\*
 
   pack:
-    name: Package payload
+    name: Package macOS payload
     runs-on: macos-latest
     needs: sign-payload
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
-        ref: sign-and-notarize
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
     
     - name: Set up dotnet
@@ -144,7 +142,7 @@ jobs:
     
     - name: Create product archive
       run: |
-        src/osx/Installer.Mac/dist.sh --package-path=components --version=$GitBuildVersion --output=pkg/gcmcore-osx-$GitBuildVersion.pkg || exit 1
+        src/osx/Installer.Mac/dist.sh --package-path=components --version=$GitBuildVersion --output=pkg/gcm-osx-$GitBuildVersion.pkg || exit 1
     
     - name: Upload package
       uses: actions/upload-artifact@v2
@@ -154,14 +152,12 @@ jobs:
           pkg/*
 
   sign-package:
-    name: Sign package file
+    name: Sign macOS package file
     runs-on: windows-latest
     needs: pack
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
-      with:
-        ref: sign-and-notarize
 
     - name: Download unsigned package file
       uses: actions/download-artifact@v2
@@ -169,7 +165,7 @@ jobs:
         name: macos-unsigned-pkg
         path: pkg
     
-    - name: Zip package file
+    - name: Zip unsigned package file
       shell: pwsh
       run: |
         Compress-Archive -Path pkg\*.pkg .\gcm-pkg.zip
@@ -192,13 +188,13 @@ jobs:
       env:
         AZ_VAULT: ${{ secrets.AZURE_VAULT }}
         AUTH_CERT: ${{ secrets.AZURE_VAULT_AUTH_CERT_NAME }}
-        ESRP_CERT: ${{ secrets.AZURE_VAULT_ESRP_CERT_NAME }}
+        REQUEST_SIGNING_CERT: ${{ secrets.AZURE_VAULT_REQUEST_SIGNING_CERT_NAME }}
       run: |
         az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
         certutil -f -importpfx out.pfx
         Remove-Item out.pfx
 
-        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:ESRP_CERT" --file out.pfx
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
         certutil -f -importpfx out.pfx
         Remove-Item out.pfx
     
@@ -223,14 +219,13 @@ jobs:
         path: .\*.pkg
 
   notarize-and-publish-signed-artifacts:
-    name: Notarize and publish signed artifacts
+    name: Notarize and publish signed macOS artifacts
     runs-on: macos-latest
     needs: sign-package
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
-        ref: sign-and-notarize
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
     
     # Install Nerdbank.GitVersioning
@@ -265,8 +260,10 @@ jobs:
     
     - name: Prepare final artifacts
       run: |
-        mkdir -p ./publish/
+        mkdir -p ./publish/payload ./publish/payload.sym
         cp -f ./pkg/*.pkg ./publish/
+        cp -Rf ./payload/ ./publish/payload/
+        cp -Rf ./symbols/ ./publish/payload.sym/
         tar -czf ./publish/gcm-osx-$GitBuildVersion.tar.gz ./payload/
         tar -czf ./publish/symbols-osx.tar.gz ./symbols/
     
