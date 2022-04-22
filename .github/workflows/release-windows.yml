@@ -3,7 +3,7 @@ name: release-windows
 on:
   workflow_dispatch:
   push:
-    branches: [ release ]
+    branches: [ release, release-migration ]
 
 jobs:
   build:
@@ -13,6 +13,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2

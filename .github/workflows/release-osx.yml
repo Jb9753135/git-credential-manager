@@ -3,7 +3,7 @@ name: release-osx
 on:
   workflow_dispatch:
   push:
-    branches: [ release ]
+    branches: [ release, release-migration ]
 
 jobs:
   build-and-lay-out:
@@ -13,6 +13,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -54,6 +55,8 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
+      with:
+        ref: release-migration
 
     - name: Download payload
       uses: actions/download-artifact@v2
@@ -113,6 +116,7 @@ jobs:
       run: |
         Expand-Archive signed/payload.zip -DestinationPath signed
         Remove-Item signed/payload.zip
+        ls signed
 
     - name: Upload signed payload
       uses: actions/upload-artifact@v2
@@ -130,6 +134,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
     
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -146,6 +151,10 @@ jobs:
       with:
         name: macos-signed-payload
         path: payload
+ 
+    - name: Check payload
+      run: |
+        ls ./payload
     
     - name: Create component package
       run: |
@@ -170,6 +179,8 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
+      with:
+        ref: release-migration
 
     - name: Download unsigned package file
       uses: actions/download-artifact@v2
@@ -245,6 +256,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
     
     # Install Nerdbank.GitVersioning
     - uses: dotnet/nbgv@master
