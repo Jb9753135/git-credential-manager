@@ -235,3 +235,58 @@ jobs:
       with:
         name: macos-signed-pkg
         path: .\*.pkg
+  
+  notarize-and-publish-signed-artifacts:
+    name: Notarize and publish signed macOS artifacts
+    runs-on: macos-latest
+    needs: sign-package
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+    
+    # Install Nerdbank.GitVersioning
+    - uses: dotnet/nbgv@master
+      with:
+        setCommonVars: true
+
+    - name: Download signed package file
+      uses: actions/download-artifact@v2
+      with:
+        name: macos-signed-pkg
+        path: pkg
+    
+    - name: Download signed payload
+      uses: actions/download-artifact@v2
+      with:
+        name: macos-signed-payload
+        path: payload
+    
+    - name: Download symbols
+      uses: actions/download-artifact@v2
+      with:
+        name: macos-symbols
+        path: symbols
+    
+    - name: Notarize and staple installer package
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+      run: |
+        .github/notarize-pkg.sh -id $APPLE_ID -p $APPLE_ID_PASSWORD -pkg pkg/*.pkg -pkg-info com.microsoft.gitcredentialmanager.component.pkg
+    
+    - name: Prepare final artifacts
+      run: |
+        mkdir -p ./publish/payload ./publish/payload.sym
+        cp -f ./pkg/*.pkg ./publish/
+        cp -Rf ./payload/* ./publish/payload/
+        cp -Rf ./symbols/* ./publish/payload.sym/
+        tar -czf ./publish/gcm-osx-$GitBuildVersion.tar.gz ./payload/
+        tar -czf ./publish/symbols-osx.tar.gz ./symbols/
+    
+    - name: Publish final artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: macos-signed-installer
+        path: ./publish/*
