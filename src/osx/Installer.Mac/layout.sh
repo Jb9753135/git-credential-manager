@@ -72,6 +72,10 @@ mkdir -p "$PAYLOAD" "$SYMBOLOUT"
 echo "Copying uninstall script..."
 cp "$INSTALLER_SRC/uninstall.sh" "$PAYLOAD" || exit 1
 
+# Copy entitlements
+echo "Copying entitlements.xml..."
+cp "$INSTALLER_SRC/entitlements.xml" "$PAYLOAD" || exit 1
+
 # Publish core application executables
 echo "Publishing core application..."
 dotnet publish "$GCM_SRC" \
