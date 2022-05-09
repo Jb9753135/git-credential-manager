@@ -1,0 +1,63 @@
+name: test-yaml
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ test-yaml ]
+
+jobs:
+  build-and-lay-out:
+    name: Build and lay out macOS payload
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
+
+    - name: Set up dotnet
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 6.0.201
+    
+    - name: Install dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: |
+        dotnet build --configuration=MacRelease
+    
+    - name: Run macOS unit tests
+      run: |
+        dotnet test --configuration=MacRelease
+
+    - name: Lay out payload and symbols
+      run: |
+        src/osx/Installer.Mac/layout.sh --configuration=MacRelease --output=payload --symbol-output=symbols
+    
+    - name: Zip payload
+      shell: pwsh
+      run: |
+        zip -r payload.zip payload
+
+    - name: Create keychain
+      env:
+        CERT_BASE64: ${{ secrets.DEVELOPER_CERTIFICATE_BASE64 }}
+        CERT_PASSPHRASE: ${{ secrets.DEVELOPER_CERTIFICATE_PASSWORD }}
+      run: |
+        security create-keychain -p pwd $RUNNER_TEMP/buildagent.keychain
+        security default-keychain -s $RUNNER_TEMP/buildagent.keychain
+        security unlock-keychain -p pwd $RUNNER_TEMP/buildagent.keychain
+        echo $CERT_BASE64 | base64 -D > $RUNNER_TEMP/cert.p12
+        security import $RUNNER_TEMP/cert.p12 -k $RUNNER_TEMP/buildagent.keychain -P $CERT_PASSPHRASE -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k pwd $RUNNER_TEMP/buildagent.keychain
+    
+    - name: Run codesign
+      run: |
+        codesign -s U97A56Q9MW --deep --force --options runtime --entitlements src/osx/Installer.Mac/entitlements.xml payload.zip
+    
+    - name: Upload payload
+      uses: actions/upload-artifact@v2
+      with:
+        name: macos-payload
+        path: payload.zip

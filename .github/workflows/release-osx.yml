@@ -3,17 +3,17 @@ name: release-osx
 on:
   workflow_dispatch:
   push:
-    branches: [ release, release-migration ]
+    branches: [ release, release-migration, test-yaml ]
 
 jobs:
-  build-and-lay-out:
-    name: Build and lay out macOS payload
+  build-lay-out-codesign:
+    name: Build, lay out, and codesign macOS payload
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-        ref: release-migration
+        ref: test-yaml
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -35,11 +35,27 @@ jobs:
       run: |
         src/osx/Installer.Mac/layout.sh --configuration=MacRelease --output=payload --symbol-output=symbols
 
+    - name: Create keychain
+      env:
+        CERT_BASE64: ${{ secrets.DEVELOPER_CERTIFICATE_BASE64 }}
+        CERT_PASSPHRASE: ${{ secrets.DEVELOPER_CERTIFICATE_PASSWORD }}
+      run: |
+        security create-keychain -p pwd $RUNNER_TEMP/buildagent.keychain
+        security default-keychain -s $RUNNER_TEMP/buildagent.keychain
+        security unlock-keychain -p pwd $RUNNER_TEMP/buildagent.keychain
+        echo $CERT_BASE64 | base64 -D > $RUNNER_TEMP/cert.p12
+        security import $RUNNER_TEMP/cert.p12 -k $RUNNER_TEMP/buildagent.keychain -P $CERT_PASSPHRASE -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k pwd $RUNNER_TEMP/buildagent.keychain
+    
+    - name: Run codesign
+      run: |
+        .github/run_macos_signing.sh payload U97A56Q9MW $GITHUB_WORKSPACE/src/osx/Installer.Mac/entitlements.xml
+
     - name: Upload payload
       uses: actions/upload-artifact@v2
       with:
         name: macos-payload
-        path: payload
+        path: payload/*
     
     - name: Upload symbols
       uses: actions/upload-artifact@v2
@@ -51,12 +67,12 @@ jobs:
     name: Sign macOS payload
     # ESRP service requires signing to run on Windows
     runs-on: windows-latest
-    needs: build-and-lay-out
+    needs: build-lay-out-codesign
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
-        ref: release-migration
+        ref: test-yaml
 
     - name: Download payload
       uses: actions/download-artifact@v2
@@ -64,7 +80,7 @@ jobs:
         name: macos-payload
         path: payload
     
-    - name: Zip payload
+    - name: Zip unsigned payload
       shell: pwsh
       run: |
         Compress-Archive -Path payload payload/payload.zip
@@ -109,21 +125,21 @@ jobs:
         APPLE_KEY_CODE: ${{ secrets.APPLE_KEY_CODE }}
         APPLE_OP_CODE: ${{ secrets.APPLE_OPERATION_CODE }}
       run: |
-        python .github\run_esrp_signing.py payload $env:APPLE_KEY_CODE $env:APPLE_OP_CODE --params 'Hardening' '--options=runtime' 'Entitlements' '--entitlements=entitlements.xml'
-    
-    - name: Unzip payload
+        python .github\run_esrp_signing.py payload $env:APPLE_KEY_CODE $env:APPLE_OP_CODE --params 'Hardening' '--options=runtime'
+
+    - name: Unzip signed payload
       shell: pwsh
       run: |
-        Expand-Archive signed/payload.zip -DestinationPath signed
-        Remove-Item signed/payload.zip
-        ls signed
+        mkdir .\signed-payload
+        Expand-Archive -LiteralPath signed\payload.zip -DestinationPath .\signed-payload -Force
+        Remove-Item signed\payload.zip -Force
 
     - name: Upload signed payload
       uses: actions/upload-artifact@v2
       with:
         name: macos-signed-payload
         path: |
-          signed\*
+          signed-payload\*
   
   pack:
     name: Package macOS payload
@@ -134,7 +150,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-        ref: release-migration
+        ref: test-yaml
     
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -150,15 +166,14 @@ jobs:
       uses: actions/download-artifact@v2
       with:
         name: macos-signed-payload
-        path: payload
- 
-    - name: Check payload
+    
+    - name: Ensure application is executable
       run: |
-        ls ./payload
+        chmod +x payload/git-credential-manager-core
     
     - name: Create component package
       run: |
-        src/osx/Installer.Mac/pack.sh --payload=payload/payload --version=$GitBuildVersionSimple --output=components/com.microsoft.gitcredentialmanager.component.pkg
+        src/osx/Installer.Mac/pack.sh --payload=payload --version=$GitBuildVersionSimple --output=components/com.microsoft.gitcredentialmanager.component.pkg
     
     - name: Create product archive
       run: |
@@ -180,7 +195,7 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
-        ref: release-migration
+        ref: test-yaml
 
     - name: Download unsigned package file
       uses: actions/download-artifact@v2
@@ -249,14 +264,14 @@ jobs:
   
   notarize-and-publish-signed-artifacts:
     name: Notarize and publish signed macOS artifacts
-    runs-on: macos-latest
+    runs-on: windows-latest
     needs: sign-package
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-        ref: release-migration
+        ref: test-yaml
     
     # Install Nerdbank.GitVersioning
     - uses: dotnet/nbgv@master
@@ -274,28 +289,61 @@ jobs:
       with:
         name: macos-signed-payload
         path: payload
-    
+
     - name: Download symbols
       uses: actions/download-artifact@v2
       with:
         name: macos-symbols
         path: symbols
     
-    - name: Notarize and staple installer package
-      env:
-        APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-      run: |
-        .github/notarize-pkg.sh -id $APPLE_ID -p $APPLE_ID_PASSWORD -pkg pkg/*.pkg -pkg-info com.microsoft.gitcredentialmanager.component.pkg
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
     
-    - name: Prepare final artifacts
+    - name: Install ESRP client
+      shell: pwsh
+      env:
+        AZ_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
       run: |
-        mkdir -p ./publish/payload ./publish/payload.sym
-        cp -f ./pkg/*.pkg ./publish/
-        cp -Rf ./payload/* ./publish/payload/
-        cp -Rf ./symbols/* ./publish/payload.sym/
-        tar -czf ./publish/gcm-osx-$GitBuildVersion.tar.gz ./payload/
-        tar -czf ./publish/symbols-osx.tar.gz ./symbols/
+        az storage blob download --file esrp.zip --account-key "$env:AZ_KEY" --account-name gcmesrp --container microsoft-esrp-client --name microsoft.esrpclient.1.2.76.nupkg
+        Expand-Archive -Path esrp.zip -DestinationPath .\esrp
+    
+    - name: Install certificates
+      shell: pwsh
+      env:
+        AZ_VAULT: ${{ secrets.AZURE_VAULT }}
+        AUTH_CERT: ${{ secrets.AZURE_VAULT_AUTH_CERT_NAME }}
+        REQUEST_SIGNING_CERT: ${{ secrets.AZURE_VAULT_REQUEST_SIGNING_CERT_NAME }}
+      run: |
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+    
+    - name: Run ESRP client
+      shell: pwsh
+      env:
+        AZURE_AAD_ID: ${{ secrets.AZURE_AAD_ID }}
+        # We temporarily need two AAD IDs, as we're using an SSL certificate associated
+        # with an older App Registration until we have the required hardware to approve
+        # the new certificate in SSL Admin.
+        AZURE_AAD_ID_TEMP: ${{ secrets.AAD_ID_TEMP }}
+        APPLE_KEY_CODE: ${{ secrets.APPLE_KEY_CODE }}
+      run: |
+        python .github\run_esrp_signing.py pkg $env:APPLE_KEY_CODE MacAppNotarize --params 'BundleId' 'com.gitcredentialmanager.gcm'
+  
+    - name: Prepare final artifacts
+      shell: pwsh
+      run: |
+        mkdir -p ./publish/payload, ./publish/payload.sym
+        cp signed/*.pkg ./publish/
+        cp ./payload/* ./publish/payload/
+        cp ./symbols/* ./publish/payload.sym/
+        tar -cvzf ./publish/gcm-osx-$GitBuildVersion.tar.gz ./payload/*
+        tar -cvzf ./publish/symbols-osx.tar.gz ./symbols/*
     
     - name: Publish final artifacts
       uses: actions/upload-artifact@v2
