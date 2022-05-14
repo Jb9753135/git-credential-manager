@@ -479,3 +479,88 @@ jobs:
         name: signed-debian-package
         path: |
           signed
+
+# ================================
+#             Publish
+# ================================
+  create-github-release:
+    name: Publish GitHub Draft Release
+    runs-on: ubuntu-latest
+    needs: [ sign-and-notarize-macos, sign-windows, sign-linux ]
+    steps:      
+      - name: Check out repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+          ref: release-migration
+
+      - name: Set up dotnet
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: 6.0.201
+      
+      # Install Nerdbank.GitVersioning
+      - uses: dotnet/nbgv@master
+        with:
+          setCommonVars: true
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+
+      - uses: actions/github-script@v4
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const version = process.env.GitBuildVersionSimple
+
+            var releaseMetadata = {
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            };
+
+            // Create the release
+            var tagName = `v${version}`;
+            var createdRelease = await github.repos.createRelease({
+              ...releaseMetadata,
+              draft: true,
+              tag_name: tagName,
+              name: `GCM ${version}`
+            });
+            releaseMetadata.release_id = createdRelease.data.id;
+
+            // Uploads contents of directory to the release created above
+            async function uploadDirectoryToRelease(directory, includeExtensions=[]) {
+              return fs.promises.readdir(directory)
+                .then(async(files) => Promise.all(
+                  files.filter(file => {
+                    return includeExtensions.length==0 || includeExtensions.includes(path.extname(file).toLowerCase());
+                  })
+                  .map(async (file) => {
+                    var filePath = path.join(directory, file);
+                    github.repos.uploadReleaseAsset({
+                      ...releaseMetadata,
+                      name: file,
+                      headers: {
+                        "content-length": (await fs.promises.stat(filePath)).size
+                      },
+                      data: fs.createReadStream(filePath)
+                    });
+                  }))
+                );
+            }
+
+            await Promise.all([
+              // Upload Windows artifacts
+              uploadDirectoryToRelease('signed-windows-installers'),
+              uploadDirectoryToRelease('windows-artifacts', ['.zip']),
+
+              // Upload macOS artifacts
+              uploadDirectoryToRelease('macos-signed-installer'),
+              uploadDirectoryToRelease('macos-symbols'),
+              uploadDirectoryToRelease('macos-signed-payload'),
+
+              // Upload Linux artifacts
+              uploadDirectoryToRelease('linux-artifacts/tar'),
+              uploadDirectoryToRelease('signed-debian-package')
+            ]);
