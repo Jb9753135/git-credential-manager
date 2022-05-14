@@ -11,7 +11,7 @@ namespace GitCredentialManager.Interop.Linux
 {
     public class SecretServiceCollection : ICredentialStore
     {
-        private const string SchemaName = "com.microsoft.GitCredentialManager";
+        private const string SchemaName = "com.github.GitCredentialManager";
         private const string ServiceAttributeName = "service";
         private const string AccountAttributeName = "account";
         private const string PlainTextContentType = "plain/text";

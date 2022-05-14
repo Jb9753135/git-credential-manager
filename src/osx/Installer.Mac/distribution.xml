@@ -16,6 +16,6 @@
         <line choice="default" />
     </choices-outline>
     <choice id="default" visible="true" enabled="false" title="Git Credential Manager" description="Git Credential Manager application.">
-        <pkg-ref id="gcmcore">com.microsoft.gitcredentialmanager.component.pkg</pkg-ref>
+        <pkg-ref id="gcmcore">com.github.gitcredentialmanager</pkg-ref>
     </choice>
 </installer-gui-script>

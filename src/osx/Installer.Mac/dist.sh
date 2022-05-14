@@ -14,7 +14,7 @@ RESXPATH="$INSTALLER_SRC/resources"
 DISTPATH="$INSTALLER_SRC/distribution.xml"
 
 # Product information
-IDENTIFIER="com.microsoft.gitcredentialmanager.dist"
+IDENTIFIER="com.github.gitcredentialmanager.dist"
 
 # Parse script arguments
 for i in "$@"
