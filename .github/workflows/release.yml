@@ -418,3 +418,64 @@ jobs:
         name: linux-artifacts
         path: |
           linux-artifacts
+
+  sign-linux:
+    name: Sign Debian package
+    # ESRP service requires signing to run on Windows
+    runs-on: windows-latest
+    needs: build-and-lay-out-linux
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: linux-artifacts
+        path: artifacts
+
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Install ESRP client
+      shell: pwsh
+      env:
+        AZ_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+      run: |
+        az storage blob download --file esrp.zip --account-key "$env:AZ_KEY" --account-name gcmesrp --container microsoft-esrp-client --name microsoft.esrpclient.1.2.76.nupkg
+        Expand-Archive -Path esrp.zip -DestinationPath .\esrp
+    
+    - name: Install certificates
+      shell: pwsh
+      env:
+        AZ_VAULT: ${{ secrets.AZURE_VAULT }}
+        AUTH_CERT: ${{ secrets.AZURE_VAULT_AUTH_CERT_NAME }}
+        REQUEST_SIGNING_CERT: ${{ secrets.AZURE_VAULT_REQUEST_SIGNING_CERT_NAME }}
+      run: |
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+    
+    - name: Run ESRP client
+      shell: pwsh
+      env:
+        AZURE_AAD_ID: ${{ secrets.AZURE_AAD_ID }}
+        # We temporarily need two AAD IDs, as we're using an SSL certificate associated
+        # with an older App Registration until we have the required hardware to approve
+        # the new certificate in SSL Admin.
+        AZURE_AAD_ID_TEMP: ${{ secrets.AAD_ID_TEMP }}
+        LINUX_KEY_CODE: ${{ secrets.LINUX_KEY_CODE }}
+        LINUX_OP_CODE: ${{ secrets.LINUX_OPERATION_CODE }}
+      run: |
+        python .github/run_esrp_signing.py artifacts/deb $env:LINUX_KEY_CODE $env:LINUX_OP_CODE
+
+    - name: Upload signed Debian package
+      uses: actions/upload-artifact@v2
+      with:
+        name: signed-debian-package
+        path: |
+          signed
