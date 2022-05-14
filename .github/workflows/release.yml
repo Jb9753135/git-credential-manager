@@ -80,7 +80,7 @@ jobs:
         name: macos-payload
         path: payload
     
-    - name: Zip payload
+    - name: Zip unsigned payload
       shell: pwsh
       run: |
         Compress-Archive -Path payload payload/payload.zip
@@ -164,6 +164,7 @@ jobs:
       uses: actions/download-artifact@v2
       with:
         name: macos-signed-payload
+        path: payload
     
     - name: Create component package
       run: |
@@ -179,3 +180,91 @@ jobs:
         name: macos-unsigned-pkg
         path: |
           pkg
+  
+  sign-and-notarize-macos:
+    name: Sign and notarize macOS package file
+    # ESRP service requires signing to run on Windows
+    runs-on: windows-latest
+    needs: pack
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v3
+
+    - name: Download unsigned package file
+      uses: actions/download-artifact@v2
+      with:
+        name: macos-unsigned-pkg
+        path: pkg
+    
+    - name: Zip unsigned package file
+      shell: pwsh
+      run: |
+        Compress-Archive -Path pkg/*.pkg pkg/gcm-pkg.zip
+        cd pkg
+        Get-ChildItem -Exclude gcm-pkg.zip | Remove-Item -Recurse -Force
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Install ESRP client
+      shell: pwsh
+      env:
+        AZ_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+      run: |
+        az storage blob download --file esrp.zip --account-key "$env:AZ_KEY" --account-name gcmesrp --container microsoft-esrp-client --name microsoft.esrpclient.1.2.76.nupkg
+        Expand-Archive -Path esrp.zip -DestinationPath .\esrp
+    
+    - name: Install certificates
+      shell: pwsh
+      env:
+        AZ_VAULT: ${{ secrets.AZURE_VAULT }}
+        AUTH_CERT: ${{ secrets.AZURE_VAULT_AUTH_CERT_NAME }}
+        REQUEST_SIGNING_CERT: ${{ secrets.AZURE_VAULT_REQUEST_SIGNING_CERT_NAME }}
+      run: |
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+    
+    - name: Sign package file
+      shell: pwsh
+      env:
+        AZURE_AAD_ID: ${{ secrets.AZURE_AAD_ID }}
+        # We temporarily need two AAD IDs, as we're using an SSL certificate associated
+        # with an older App Registration until we have the required hardware to approve
+        # the new certificate in SSL Admin.
+        AZURE_AAD_ID_TEMP: ${{ secrets.AAD_ID_TEMP }}
+        APPLE_KEY_CODE: ${{ secrets.APPLE_KEY_CODE }}
+        APPLE_SIGNING_OP_CODE: ${{ secrets.APPLE_SIGNING_OPERATION_CODE }}
+      run: |
+        python .github\run_esrp_signing.py pkg $env:APPLE_KEY_CODE $env:APPLE_SIGNING_OP_CODE
+    
+    - name: Unzip signed package file
+      shell: pwsh
+      run: |
+        mkdir unsigned
+        Expand-Archive -LiteralPath signed\gcm-pkg.zip -DestinationPath .\unsigned -Force
+        Remove-Item signed\gcm-pkg.zip -Force
+    
+    - name: Notarize signed package file
+      shell: pwsh
+      env:
+        AZURE_AAD_ID: ${{ secrets.AZURE_AAD_ID }}
+        # We temporarily need two AAD IDs, as we're using an SSL certificate associated
+        # with an older App Registration until we have the required hardware to approve
+        # the new certificate in SSL Admin.
+        AZURE_AAD_ID_TEMP: ${{ secrets.AAD_ID_TEMP }}
+        APPLE_KEY_CODE: ${{ secrets.APPLE_KEY_CODE }}
+        APPLE_NOTARIZATION_OP_CODE: ${{ secrets.APPLE_NOTARIZATION_OPERATION_CODE }}
+      run: |
+        python .github\run_esrp_signing.py unsigned $env:APPLE_KEY_CODE $env:APPLE_NOTARIZATION_OP_CODE --params 'BundleId' 'com.github.gitcredentialmanager'
+    
+    - name: Publish signed installer
+      uses: actions/upload-artifact@v2
+      with:
+        name: macos-signed-installer
+        path: signed/*.pkg
