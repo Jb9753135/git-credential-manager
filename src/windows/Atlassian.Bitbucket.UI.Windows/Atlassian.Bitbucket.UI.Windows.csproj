@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net472</TargetFramework>
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
     <UseWPF>true</UseWPF>
     <RootNamespace>Atlassian.Bitbucket.UI</RootNamespace>
     <AssemblyName>Atlassian.Bitbucket.UI</AssemblyName>
