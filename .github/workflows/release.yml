@@ -267,4 +267,54 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: macos-signed-installer
-        path: signed/*.pkg
+
+# ================================
+#              Windows
+# ================================
+  build-and-lay-out-windows:
+    name: Build and lay out Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+
+    - name: Set up dotnet
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 6.0.201
+
+    # Install Nerdbank.GitVersioning
+    - uses: dotnet/nbgv@master
+      with:
+        setCommonVars: true
+    
+    - name: Install dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: |
+        dotnet build --configuration=WindowsRelease
+
+    - name: Run Windows unit tests
+      run: |
+        dotnet test --configuration=WindowsRelease
+    
+    - name: Lay out
+      shell: pwsh
+      run: |
+        mkdir windows-exes,windows-payload,windows-symbols
+        Move-Item -Path out\windows\Payload.Windows\bin\Release\net472\win-x86\* -Destination windows-payload
+        Move-Item -Path windows-payload\*.pdb -Destination windows-symbols
+        Compress-Archive -Path windows-payload/* ./win-x86-$env:GitBuildVersionSimple.zip
+        Compress-Archive -Path windows-symbols/* ./symbols-win-x86-$env:GitBuildVersionSimple.zip
+        Move-Item -Path out\windows\Installer.Windows\bin\Release\net472\*.exe -Destination windows-exes
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: windows-artifacts
+        path: |
+          windows-exes
+          win-x86-$env:GitBuildVersionSimple.zip
+          symbols-win-x86-$env:GitBuildVersionSimple.zip
