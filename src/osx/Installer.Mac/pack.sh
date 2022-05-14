@@ -12,7 +12,7 @@ OUT="$ROOT/out"
 INSTALLER_SRC="$SRC/osx/Installer.Mac"
 
 # Product information
-IDENTIFIER="com.microsoft.gitcredentialmanager"
+IDENTIFIER="com.github.gitcredentialmanager"
 INSTALL_LOCATION="/usr/local/share/gcm-core"
 
 # Parse script arguments
