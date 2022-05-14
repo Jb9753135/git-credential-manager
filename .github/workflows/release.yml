@@ -149,7 +149,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-    
+
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
       with:
@@ -318,3 +318,68 @@ jobs:
           windows-exes
           win-x86-$env:GitBuildVersionSimple.zip
           symbols-win-x86-$env:GitBuildVersionSimple.zip
+
+  sign-windows:
+    name: Sign Windows exes
+    # ESRP service requires signing to run on Windows
+    runs-on: windows-latest
+    needs: build-and-lay-out-windows
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: windows-artifacts
+        path: artifacts
+
+    - name: Remove timestamp file
+      shell: pwsh
+      run: |
+        cd artifacts
+        Remove-Item *.timestamp
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Install ESRP client
+      shell: pwsh
+      env:
+        AZ_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
+      run: |
+        az storage blob download --file esrp.zip --account-key "$env:AZ_KEY" --account-name gcmesrp --container microsoft-esrp-client --name microsoft.esrpclient.1.2.76.nupkg
+        Expand-Archive -Path esrp.zip -DestinationPath .\esrp
+    
+    - name: Install certificates
+      shell: pwsh
+      env:
+        AZ_VAULT: ${{ secrets.AZURE_VAULT }}
+        AUTH_CERT: ${{ secrets.AZURE_VAULT_AUTH_CERT_NAME }}
+        REQUEST_SIGNING_CERT: ${{ secrets.AZURE_VAULT_REQUEST_SIGNING_CERT_NAME }}
+      run: |
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:AUTH_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+        az keyvault secret download --vault-name "$env:AZ_VAULT" --name "$env:REQUEST_SIGNING_CERT" --file out.pfx
+        certutil -f -importpfx out.pfx
+        Remove-Item out.pfx
+    
+    - name: Run ESRP client
+      shell: pwsh
+      env:
+        AZURE_AAD_ID: ${{ secrets.AZURE_AAD_ID }}
+        # We temporarily need two AAD IDs, as we're using an SSL certificate associated
+        # with an older App Registration until we have the required hardware to approve
+        # the new certificate in SSL Admin.
+        AZURE_AAD_ID_TEMP: ${{ secrets.AAD_ID_TEMP }}
+        WINDOWS_KEY_CODE: ${{ secrets.WINDOWS_KEY_CODE }}
+        WINDOWS_OP_CODE: ${{ secrets.WINDOWS_OPERATION_CODE }}
+      run: |
+        python .github\run_esrp_signing.py artifacts/windows-exes $env:WINDOWS_KEY_CODE $env:WINDOWS_OP_CODE --params 'OpusName' 'Microsoft' 'OpusInfo' 'http://www.microsoft.com' 'FileDigest' '/fd "SHA256"' 'PageHash' '/NPH' 'TimeStamp' '/tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256'
+    
+    - name: Publish final artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: signed-windows-installers
+        path: signed
