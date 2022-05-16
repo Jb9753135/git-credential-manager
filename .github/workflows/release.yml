@@ -3,7 +3,7 @@ name: release
 on:
   workflow_dispatch:
   push:
-    branches: [ release ]
+    branches: [ release, release-migration ]
 
 jobs:
 # ================================
@@ -16,6 +16,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -73,6 +74,8 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
+      with:
+        ref: release-migration
 
     - name: Download payload
       uses: actions/download-artifact@v2
@@ -149,6 +152,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -189,6 +193,8 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
+      with:
+        ref: release-migration
 
     - name: Download unsigned package file
       uses: actions/download-artifact@v2
@@ -267,6 +273,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: macos-signed-installer
+        path: signed/*.pkg
 
 # ================================
 #              Windows
@@ -278,6 +285,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -326,6 +334,8 @@ jobs:
     needs: build-and-lay-out-windows
     steps:
     - uses: actions/checkout@v3
+      with:
+        ref: release-migration
 
     - name: Download artifacts
       uses: actions/download-artifact@v2
@@ -394,6 +404,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: release-migration
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v2
@@ -426,6 +437,8 @@ jobs:
     needs: build-and-lay-out-linux
     steps:
     - uses: actions/checkout@v3
+      with:
+        ref: release-migration
 
     - name: Download artifacts
       uses: actions/download-artifact@v2
