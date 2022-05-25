@@ -3,7 +3,7 @@ name: GCM
 on:
   workflow_dispatch:
   push:
-    branches: [ main, linux ]
+    branches: [ main, linux, test-release-migration ]
   pull_request:
     branches: [ main, linux ]
 
@@ -20,6 +20,7 @@ jobs:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
+        ref: test-release-migration
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v1
