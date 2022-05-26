@@ -3,7 +3,7 @@ name: release
 on:
   workflow_dispatch:
   push:
-    branches: [ release, test-release ]
+    branches: [ release, test-release-windows-signing ]
 
 jobs:
 # ================================
@@ -16,7 +16,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-        ref: test-release
+        ref: test-release-windows-signing
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -73,7 +73,7 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
-        ref: test-release
+        ref: test-release-windows-signing
 
     - name: Download payload
       uses: actions/download-artifact@v3
@@ -136,7 +136,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-        ref: test-release
+        ref: test-release-windows-signing
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -177,7 +177,7 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v3
       with:
-        ref: test-release
+        ref: test-release-windows-signing
 
     - name: Download unsigned package
       uses: actions/download-artifact@v3
@@ -255,7 +255,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-        ref: test-release
+        ref: test-release-windows-signing
 
     - name: Set up dotnet
       uses: actions/setup-dotnet@v2
@@ -284,7 +284,7 @@ jobs:
         cd src/windows/Installer.Windows/
         ./layout.ps1 -Configuration WindowsRelease -Output payload -SymbolOutput symbols
         mkdir unsigned-payload
-        Get-ChildItem -Path payload/* -Include *.exe, *.dll | Move-Item -Destination unsigned-payload
+        Get-ChildItem -Path payload/* -Include *.exe, *.dll, NOTICE | Move-Item -Destination unsigned-payload
 
     - uses: azure/login@v1
       with:
@@ -326,7 +326,7 @@ jobs:
         Move-Item -Path signed/* -Destination signed-payload
         # ESRP will not sign the *.exe.config or NOTICE files, but they are needed to build the installers.
         # Due to this, we copy them after signing.
-        Get-ChildItem -Path src/windows/Installer.Windows/payload/* -Include *.exe.config, NOTICE | Move-Item -Destination signed-payload
+        Get-ChildItem -Path src/windows/Installer.Windows/payload/* -Include *.exe.config | Move-Item -Destination signed-payload
         Remove-Item signed -Recurse -Force
 
     - name: Build with signed payload
@@ -373,7 +373,7 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-        ref: test-release
+        ref: test-release-windows-signing
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v2
@@ -407,7 +407,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       with:
-        ref: test-release
+        ref: test-release-windows-signing
 
     - name: Download artifacts
       uses: actions/download-artifact@v3
@@ -461,7 +461,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0 # Indicate full history so Nerdbank.GitVersioning works.
-          ref: test-release
+          ref: test-release-windows-signing
 
       - name: Set up dotnet
         uses: actions/setup-dotnet@v2
